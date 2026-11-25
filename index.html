@@ -1,0 +1,1037 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PEA Construction Monitoring Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    
+    <script>
+        tailwind.config = {
+            darkMode: 'class'
+        }
+    </script>
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600;700&display=swap');
+        
+        :root {
+            --pea-purple: #7B2CBF;
+            --pea-purple-dark: #5A189A;
+            --pea-orange: #FF8500;
+            --pea-bg: #F8F9FA;
+            --sidebar-width: 280px;
+        }
+
+        body { 
+            font-family: 'Sarabun', sans-serif; 
+            background-color: var(--pea-bg); 
+            color: #333;
+            overflow-x: hidden;
+            display: flex;
+            transition: background-color 0.3s ease, color 0.3s ease;
+        }
+
+        .pea-gradient {
+            background: linear-gradient(135deg, var(--pea-purple) 0%, var(--pea-purple-dark) 100%);
+        }
+
+        .sidebar-item-active {
+            background-color: rgba(255, 255, 255, 0.15);
+            border-left: 4px solid var(--pea-orange);
+            font-weight: 600;
+        }
+
+        .tab-active { 
+            border-bottom: 4px solid var(--pea-orange); 
+            color: var(--pea-purple); 
+            font-weight: 700; 
+            background-color: rgba(123, 44, 191, 0.05);
+        }
+
+        .dark .tab-active {
+            border-bottom: 4px solid var(--pea-orange);
+            color: #FF8500;
+            background-color: rgba(255, 133, 0, 0.1);
+        }
+
+        #sidebar {
+            width: var(--sidebar-width);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            position: fixed;
+            height: 100vh;
+            left: 0;
+            top: 0;
+            z-index: 50;
+        }
+
+        main {
+            flex: 1;
+            margin-left: var(--sidebar-width);
+            transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            min-height: 100vh;
+        }
+
+        body.sidebar-closed #sidebar { transform: translateX(-100%); }
+        body.sidebar-closed main { margin-left: 0; }
+
+        @media (max-width: 1024px) {
+            main { margin-left: 0 !important; }
+            #sidebar { transform: translateX(-100%); }
+            #sidebar.open { transform: translateX(0); }
+        }
+
+        .modal-animate-in { animation: modalIn 0.3s ease-out forwards; }
+        @keyframes modalIn {
+            from { opacity: 0; transform: scale(0.95) translateY(20px); }
+            to { opacity: 1; transform: scale(1) translateY(0); }
+        }
+
+        .card-hover { transition: all 0.3s ease; }
+        .card-hover:hover { transform: translateY(-5px); box-shadow: 0 10px 20px rgba(0,0,0,0.1); }
+
+        /* Custom Loading Spinner */
+        .spinner {
+            border: 3px solid rgba(123, 44, 191, 0.1);
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            border-left-color: var(--pea-purple);
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Pulse Animation for Loading Stats */
+        .loading-pulse {
+            animation: pulse 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: .4; }
+        }
+
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; }
+        ::-webkit-scrollbar-thumb { background: #ccc; border-radius: 10px; }
+
+        .dark ::-webkit-scrollbar-track { background: #1f2937; }
+        .dark ::-webkit-scrollbar-thumb { background: #4b5563; }
+    </style>
+    
+    <script>
+        (function() {
+            const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            const savedTheme = localStorage.getItem('theme');
+            if (savedTheme === 'dark' || (!savedTheme && systemPrefersDark)) {
+                document.documentElement.classList.add('dark');
+            } else {
+                document.documentElement.classList.remove('dark');
+            }
+        })();
+    </script>
+
+    <!-- Modern visual layer: original markup and scripts remain unchanged -->
+    <style id="modern-pea-ui">
+      :root{--pea-bg:#f4f5fa;--pea-purple:#7437b2;--pea-purple-dark:#30134f;--surface:#fff;--ink:#29243a;--muted:#6e687e;--line:#e5e3ed;--soft:#f6f4fa;--shadow:0 4px 18px rgba(48,19,79,.045)}
+      .dark{--surface:#202333;--ink:#f0edf7;--muted:#b8b5ca;--line:#38394d;--soft:#292b3e;--shadow:0 4px 18px rgba(0,0,0,.15)}
+      body{line-height:1.55;-webkit-font-smoothing:antialiased}
+      main{min-width:0;background:#f4f5fa!important} .dark main{background:#171927!important}
+      #sidebar{background:linear-gradient(160deg,#48206d,#30134f 65%,#25113e);box-shadow:5px 0 24px #25113e19}
+      #sidebar>div:first-child{padding:24px 20px} #sidebar nav{padding:18px 10px} #sidebar nav button{border-radius:10px;line-height:1.55;padding-top:14px;padding-bottom:14px;white-space:normal} #sidebar nav>button,#sidebar nav>div>button{padding-left:14px;padding-right:12px} #sidebar nav svg{flex-shrink:0} #sidebar .sidebar-item-active{background:#ffffff20;border-left:3px solid #ffad55;box-shadow:0 3px 12px #00000012} #submenu-3{border-radius:10px;margin-top:5px} #sidebar>div:last-child{line-height:1.8;color:#ded0ee}
+      main>div{max-width:1800px!important} main>div>div:first-child{background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:20px;box-shadow:var(--shadow)} #pageTitle{font-size:clamp(1.2rem,2vw,1.65rem);line-height:1.4;color:var(--ink)} #pageTitle+p{font-size:11px;letter-spacing:.065em;color:var(--muted)} #headerActions:not(.hidden){gap:8px} #headerActions>*{margin-bottom:0} #lastUpdate{font-size:11px;font-style:normal;color:var(--muted);border-color:var(--line)}
+      #tabContainer{padding:6px;border-color:var(--line);background:var(--surface);box-shadow:var(--shadow);border-radius:15px} #tabContainer button{border:1px solid transparent;color:var(--muted);border-radius:10px} #tabContainer button:hover{background:var(--soft)} #tabContainer button.tab-active{background:#eee5fa;color:#63249a;border:1px solid #dcc8f1;box-shadow:inset 0 -3px #ff8500} .dark #tabContainer button.tab-active{background:#3b2853;color:#e4c9ff;border-color:#64478a} #tabContainer button span:last-child{font-size:11px} .dark #tabContainer button span:last-child{color:#d4b5f4}
+      #standardStats>div,#overviewCards>div,#tableViewWrapper,#rightWidgetArea>div:not(:last-child),#overviewView>div.grid>div,#external-container>div{background:var(--surface);border-color:var(--line);box-shadow:var(--shadow);border-radius:17px} #standardStats>div{border-width:1px;border-top:3px solid #9b80bb;padding:20px} #standardStats>div:nth-child(2){border-top-color:#10b981} #standardStats>div:nth-child(3){border-top-color:#f59b39} #standardStats>div:nth-child(4){border-top-color:#7437b2} #standardStats>div>p{font-size:13px;letter-spacing:0} #standardStats>div:first-child>p{color:var(--muted)} #standardStats span[id]{font-size:clamp(1.6rem,2.6vw,2.25rem);font-variant-numeric:tabular-nums;line-height:1.3} #standardStats span:not([id]){font-size:11px;color:var(--muted)} .card-hover:hover{transform:translateY(-2px);box-shadow:0 8px 24px #7437b215}
+      #mainView>*{min-width:0} #tableViewWrapper>div:nth-child(2){background:var(--surface);border-color:var(--line);padding:18px} #tableViewWrapper h2,#rightWidgetArea h3,#overviewView h3{color:var(--ink);font-size:15px} #tableViewWrapper select,#searchInput{border:1px solid var(--line);background:var(--soft);color:var(--ink);border-radius:9px;font-size:12px;min-height:38px} #searchInput::placeholder{color:var(--muted)} button{transition:background-color .18s,box-shadow .18s,transform .18s} button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid #a879d7;outline-offset:2px} #headerActions button,#tableViewWrapper button{min-height:36px;border-radius:9px;font-size:12px;letter-spacing:0} #mainDataTable{font-size:13px} #tableHeader,#tableHeader th{background:var(--soft);color:var(--muted);font-size:12px;border-color:var(--line)} #tableBody{font-size:13px} #tableBody tr:nth-child(even){background:var(--soft)} #tableBody tr:hover{background:#eee5fa} .dark #tableBody tr:hover{background:#38294e} #tableBody td{border-bottom:1px solid var(--line);line-height:1.6} #tableBody td.font-mono{font-size:12px} #tableBody td span.rounded-full{font-size:11px;white-space:nowrap;box-shadow:none} #rightWidgetArea>div:last-child{background:linear-gradient(135deg,#7437b2,#51217e);box-shadow:var(--shadow);border-radius:17px} #overviewCards>div{border-top:3px solid #f59b39} #overviewCards>div.border-blue-500{border-top-color:#3b82f6} #ovAojRanking td{padding:12px 5px;font-size:13px;border-bottom:1px solid var(--line)} #overviewView table th{background:var(--surface);color:var(--muted);font-size:12px} #ovComparisonChart{max-height:300px} #wbsModal .modal-animate-in{border:1px solid var(--line);max-height:calc(100dvh - 32px);overflow-y:auto} #modalPlan,#modalObstacle{border-radius:12px;line-height:1.8} #wbsModal .pea-gradient{background:linear-gradient(135deg,#7437b2,#48206d)}
+      .dark #standardStats .text-green-600{color:#55d9a3} .dark #standardStats .text-orange-600{color:#ffb76a} .dark #standardStats .text-purple-600{color:#cba4f6}
+      @media(min-width:1280px){#headerActions:not(.hidden){flex-direction:row;align-items:center;flex-wrap:wrap;justify-content:flex-end} main>div>div:first-child>div:first-child{min-width:0}}
+      @media(max-width:640px){main>div{padding:12px!important} main>div>div:first-child{padding:14px} #headerActions:not(.hidden){align-items:flex-start;flex-direction:row;flex-wrap:wrap} #standardStats>div{padding:14px} #tableViewWrapper>div:nth-child(2){padding:12px} #tableViewWrapper select,#searchInput{max-width:100%} #wbsModal .modal-animate-in>div.p-8{padding:20px}}
+      @media(prefers-reduced-motion:reduce){.card-hover,button,#sidebar,main{transition:none!important}.card-hover:hover{transform:none}.modal-animate-in{animation:none}}
+    </style>
+
+<style>#v2Tools button{padding:6px 12px;border:1px solid #b9a6d0;border-radius:8px}#v2Tools button:disabled{opacity:.35}#execTable td{padding:10px;white-space:nowrap}#execTable th{white-space:nowrap}#executive select{max-width:100%}</style></head>
+<body class="dark:bg-gray-900 dark:text-gray-100">
+
+    <div id="overlay" onclick="toggleSidebar()" class="fixed inset-0 bg-black/50 z-40 hidden lg:hidden"></div>
+
+    <!-- Sidebar -->
+    <aside id="sidebar" class="pea-gradient text-white flex flex-col shadow-2xl">
+        <div class="p-6 flex items-center justify-between border-b border-white/10">
+            <div class="flex items-center gap-3">
+                <div class="bg-white p-2 rounded-lg text-purple-700 font-bold text-xl shadow-md">PEA</div>
+                <div>
+                    <h2 class="font-bold text-lg leading-tight">Construction</h2>
+                    <p class="text-[10px] text-purple-200 opacity-80 uppercase tracking-tighter">Monitoring System</p>
+                </div>
+            </div>
+            <button onclick="toggleSidebar()" class="lg:hidden p-1 hover:bg-white/10 rounded">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
+        </div>
+
+        <nav class="flex-1 overflow-y-auto py-4 space-y-1"><button id="main-nav-0" onclick="switchMainPage(0)" class="w-full px-6 py-4 text-left text-sm font-bold">0. ภาพรวมผู้บริหาร</button>
+            <button onclick="switchMainPage(1)" id="main-nav-1" class="w-full flex items-center px-6 py-3.5 hover:bg-white/10 transition text-left text-sm gap-3">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                1. สถานะงานปรับปรุงแรงต่ำ
+            </button>
+            <button onclick="switchMainPage(2)" id="main-nav-2" class="w-full flex items-center px-6 py-3.5 hover:bg-white/10 transition text-left text-sm gap-3">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"></path></svg>
+                2. สถานะงานย้ายแนวระบบไฟฟ้า
+            </button>
+            
+            <div class="space-y-1">
+                <button onclick="toggleSubMenu('submenu-3')" class="w-full flex items-center justify-between px-6 py-3.5 hover:bg-white/10 transition text-left text-sm">
+                    <div class="flex items-center gap-3">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path></svg>
+                        3. สถานะขอจัดสรรพัสดุขาดแคลน
+                    </div>
+                    <svg id="arrow-3" class="w-4 h-4 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                </button>
+                <div id="submenu-3" class="hidden bg-black/10 text-xs">
+                    <button onclick="switchMainPage(3.1)" id="main-nav-3-1" class="w-full py-3 pl-14 pr-6 hover:bg-white/10 text-left opacity-80 hover:opacity-100 border-l border-white/5 text-[11px]">3.1 พัสดุขาดแคลนงานปรับปรุงแรงต่ำ</button>
+                    <button onclick="switchMainPage(3.2)" id="main-nav-3-2" class="w-full py-3 pl-14 pr-6 hover:bg-white/10 text-left opacity-80 hover:opacity-100 border-l border-white/5 text-[11px]">3.2 พัสดุขาดแคลนงานย้ายแนวระบบไฟฟ้า</button>
+                </div>
+            </div>
+
+            <button onclick="switchMainPage(4)" id="main-nav-4" class="w-full flex items-center px-6 py-3.5 hover:bg-white/10 transition text-left text-sm gap-3">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                4. สถานะขออนุมัติเปิดงานย้ายแนวระบบไฟฟ้า
+            </button>
+        </nav>
+
+        <div class="p-6 border-t border-white/10 text-[11px] text-white/70 space-y-1">
+            <div class="font-bold text-white">แผนกปรับปรุงระบบไฟฟ้า</div>
+            <div>กองวิศวกรรมและวางแผน</div>
+            <div>โทร. 10120, 10121, 10122</div>
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="bg-[#F8F9FA] dark:bg-gray-900">
+        <div class="p-4 md:p-8 max-w-[1600px] mx-auto">
+            
+            <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-6">
+                <div class="flex items-center gap-4">
+                    <button onclick="toggleSidebar()" class="p-2.5 bg-white border border-gray-200 rounded-xl text-purple-700 shadow-sm hover:bg-purple-50 transition active:scale-95 dark:bg-gray-800 dark:border-gray-700 dark:text-purple-400 dark:hover:bg-gray-700">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h7"></path></svg>
+                    </button>
+                    <div>
+                        <h1 id="pageTitle" class="text-2xl font-bold text-gray-800 dark:text-white tracking-tight">สถานะงาน</h1>
+                        <p class="text-[10px] text-gray-400 dark:text-gray-400 font-bold uppercase tracking-wider mt-0.5">PEA Construction Monitoring Dashboard</p>
+                    </div>
+                </div>
+                
+                <div id="headerActions" class="text-right flex flex-col items-end w-full md:w-auto">
+                     <!-- Theme Mode Switcher Button -->
+                     <button onclick="toggleTheme()" class="mb-2 flex items-center gap-2 px-3 py-1.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-750 transition text-xs font-bold shadow-sm">
+                         <!-- Sun Icon (visible in Dark Mode) -->
+                         <svg id="theme-sun" class="w-4 h-4 text-amber-500 hidden" fill="currentColor" viewBox="0 0 20 20">
+                             <path fill-rule="evenodd" d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 17.95a1 1 0 01-1.414 0l-.707-.707a1 1 0 011.414-1.414l.707.707a1 1 0 010 1.414zm0-12.12a1 1 0 010-1.414l.707-.707a1 1 0 011.414 1.414l-.707.707a1 1 0 01-1.414 0zM4 11a1 1 0 100-2H3a1 1 0 100 2h1z" clip-rule="evenodd"/>
+                         </svg>
+                         <!-- Moon Icon (visible in Light Mode) -->
+                         <svg id="theme-moon" class="w-4 h-4 text-indigo-500" fill="currentColor" viewBox="0 0 20 20">
+                             <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z" />
+                         </svg>
+                         <span id="theme-text">Light Mode</span>
+                     </button>
+
+                     <div id="lastUpdate" class="text-[10px] italic text-gray-400 dark:text-gray-300 font-medium bg-white dark:bg-gray-800 px-3 py-1 rounded-full border dark:border-gray-700 mb-2 flex items-center gap-2">
+                         <span id="updateText">กำลังโหลดข้อมูล...</span>
+                     </div>
+                     <button onclick="loadDashboardData(true)" class="text-[10px] bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg transition shadow-sm font-bold uppercase tracking-wider flex items-center gap-2">
+                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                        รีเฟรชข้อมูล
+                    </button>
+                </div>
+            </div>
+
+            <section id="executive" class="hidden space-y-5"><div class="flex gap-3 items-center"><select id="execAoj" onchange="renderExecutive()" class="p-2 rounded-lg border dark:bg-gray-800"></select><span id="execMessage" role="status"></span></div><div id="execCards" class="grid grid-cols-2 md:grid-cols-4 gap-4"></div><div class="bg-white dark:bg-gray-800 rounded-2xl p-5 border dark:border-gray-700"><h2 class="font-bold mb-4">ภาพรวมแผนงานและการติดตามเป้าหมาย</h2><div class="overflow-x-auto"><table class="w-full text-sm" id="execTable"></table></div><p class="text-xs mt-4">เป้าหมายระดับแผนงาน • วันสุดท้ายของเดือน • แจ้งเตือน 30 วัน • นับวันปฏิทินรวมวันนี้ • อัตราที่ต้องทำเป็นค่าเฉลี่ย ไม่ใช่การพยากรณ์</p></div></section><div id="dashboard-container">
+                <div id="tabContainer" class="flex flex-wrap bg-white dark:bg-gray-800 rounded-xl shadow-sm mb-6 p-1 gap-1 border border-gray-200 dark:border-gray-700"></div>
+
+                <!-- Stats Cards Section -->
+                <div id="standardStats" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                    <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-sm border-b-4 border-gray-300 dark:border-gray-600 card-hover">
+                        <p class="text-[10px] font-bold text-gray-400 uppercase mb-1">งานทั้งหมด</p>
+                        <div class="flex items-baseline gap-1"><span id="statTotal" class="text-2xl font-black text-gray-700 dark:text-white">---</span><span class="text-[10px] text-gray-400">รายการ</span></div>
+                    </div>
+                    <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-sm border-b-4 border-green-500 card-hover">
+                        <p class="text-[10px] font-bold text-green-600 uppercase mb-1">เสร็จสิ้น (F4, E2)</p>
+                        <div class="flex items-baseline gap-1"><span id="statCompleted" class="text-2xl font-black text-green-600">---</span><span class="text-[10px] text-gray-400">รายการ</span></div>
+                    </div>
+                    <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-sm border-b-4 border-orange-500 card-hover">
+                        <p class="text-[10px] font-bold text-orange-600 uppercase mb-1">ดำเนินการ</p>
+                        <div class="flex items-baseline gap-1"><span id="statOngoing" class="text-2xl font-black text-orange-600 font-black">---</span><span class="text-[10px] text-gray-400">รายการ</span></div>
+                    </div>
+                    <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-sm border-b-4 border-purple-600 card-hover">
+                        <p class="text-[10px] font-bold text-purple-600 uppercase mb-1">ความสำเร็จ</p>
+                        <span id="statPercent" class="text-2xl font-black text-purple-600 dark:text-purple-400">---%</span>
+                    </div>
+                </div>
+
+                <div id="mainView" class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                    <!-- Table Section -->
+                    <div id="tableViewWrapper" class="lg:col-span-8 bg-white dark:bg-gray-800 rounded-2xl shadow-sm border dark:border-gray-700 overflow-hidden relative">
+                        <!-- LOCAL LOADING FOR TABLE -->
+                        <div id="tableLoader" class="hidden absolute inset-0 bg-white/60 dark:bg-gray-800/60 backdrop-blur-[2px] flex flex-col items-center justify-center z-20">
+                            <div class="spinner mb-2"></div>
+                            <p class="text-[10px] font-bold text-purple-700 dark:text-purple-400 animate-pulse">กำลังเรียกดูข้อมูลตาราง...</p>
+                        </div>
+
+                        <div class="p-5 border-b dark:border-gray-700 bg-gray-50/50 dark:bg-gray-700/30 flex flex-wrap items-center justify-between gap-3">
+                            <h2 class="font-bold text-gray-700 dark:text-white flex items-center gap-2 text-sm md:text-base">
+                                <span id="viewColor" class="w-1.5 h-5 bg-orange-500 rounded-full"></span>
+                                <span id="viewHeaderLabel">รายการโครงการ</span> <span id="tabLabel" class="text-purple-700 dark:text-purple-400">-</span>
+                            </h2>
+                            <div class="flex flex-wrap items-center gap-2">
+                                <select id="aojFilter" onchange="applyFilters()" class="text-xs p-2 border rounded-lg outline-none bg-white dark:bg-gray-700 dark:border-gray-650 dark:text-white">
+                                    <option value="">การไฟฟ้า: ทั้งหมด</option>
+                                </select>
+                                <select id="statusFilter" onchange="applyFilters()" class="text-xs p-2 border rounded-lg outline-none bg-white dark:bg-gray-700 dark:border-gray-650 dark:text-white">
+                                    <option value="all">สถานะ: ทั้งหมด</option>
+                                    <option value="done">เสร็จสิ้น (F4, E2)</option>
+                                    <option value="ongoing">ดำเนินการอยู่</option>
+                                </select>
+                                <input type="text" id="searchInput" placeholder="ค้นหา..." class="text-xs p-2 border rounded-lg outline-none w-32 md:w-48 bg-white dark:bg-gray-700 dark:border-gray-650 dark:text-white">
+                                <button onclick="exportToExcel()" class="bg-green-600 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-green-700 transition flex items-center gap-2 shadow-sm">
+                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                                    EXCEL
+                                </button>
+                            </div>
+                        </div>
+                        <div id="v2Tools" class="flex flex-wrap gap-2 items-center p-3 border-b dark:border-gray-700 text-xs"><label>จำนวนต่อหน้า <select id="pageSize" onchange="tablePage=1;applyFilters()" class="p-2 border rounded dark:bg-gray-800"><option>25</option><option selected>50</option><option>100</option><option value="all">ทั้งหมด</option></select></label><button onclick="movePage(-1)" id="prevPage">ก่อนหน้า</button><span id="pageInfo"></span><button onclick="movePage(1)" id="nextPage">ถัดไป</button><label>Excel <select id="exportScope" class="p-2 border rounded dark:bg-gray-800"><option value="filtered">ข้อมูลที่กรองทั้งหมด</option><option value="all">ข้อมูลทั้งหมด</option></select></label><span>คลิกหัวคอลัมน์เพื่อเรียงลำดับ</span></div><div class="overflow-x-auto min-h-[450px]">
+                            <table id="mainDataTable" class="w-full text-left">
+                                <thead id="tableHeader" class="bg-gray-50 dark:bg-gray-700/50 text-[10px] text-gray-400 dark:text-gray-300 uppercase font-black border-b dark:border-gray-700 sticky top-0 z-10"></thead>
+                                <tbody id="tableBody" class="divide-y divide-gray-50 dark:divide-gray-700 text-xs"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                    
+                    <!-- Sidebar Charts & Info -->
+                    <div id="rightWidgetArea" class="lg:col-span-4 space-y-6">
+                        <!-- Doughnut Chart Wrapper -->
+                        <div class="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border dark:border-gray-700 relative">
+                            <div id="chartLoader" class="hidden absolute inset-0 bg-white/70 dark:bg-gray-800/70 flex items-center justify-center z-10 rounded-2xl">
+                                <div class="spinner"></div>
+                            </div>
+                            <h3 class="text-sm font-bold text-gray-800 dark:text-white mb-4 flex items-center gap-2">
+                                <svg class="w-4 h-4 text-purple-600" fill="currentColor" viewBox="0 0 20 20"><path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zM8 7a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zM14 4a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z"></path></svg>
+                                สัดส่วนสถานะงาน
+                            </h3>
+                            <div class="h-[240px]"><canvas id="statusChart"></canvas></div>
+                        </div>
+
+                        <!-- Target Goal Widget -->
+                        <div id="targetWidget" class="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border dark:border-gray-700">
+                            <h3 class="text-sm font-bold text-gray-800 dark:text-white mb-3 flex items-center gap-2">
+                                <svg class="w-4 h-4 text-orange-500" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd"></path></svg>
+                                เป้าหมายดำเนินการ
+                            </h3>
+                            <div id="wbsInfo" class="space-y-2"></div>
+                        </div>
+
+                        <div class="p-6 bg-purple-600 rounded-2xl shadow-lg text-white relative overflow-hidden">
+                            <div class="relative z-10">
+                                <p class="text-xs font-bold opacity-80 uppercase tracking-widest mb-1">TIP</p>
+                                <p class="text-sm">คลิกที่แถวรายการ WBS เพื่อดู <span class="font-bold underline decoration-orange-400">แผนงานและอุปสรรค</span></p>
+                            </div>
+                            <svg class="absolute -right-4 -bottom-4 w-24 h-24 text-white/10" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Summary Overview Section -->
+                <div id="overviewView" class="hidden space-y-6 relative">
+                    <div id="ovLoader" class="hidden absolute inset-0 bg-[#F8F9FA]/80 dark:bg-gray-900/80 backdrop-blur-sm z-30 flex items-center justify-center min-h-[500px]">
+                        <div class="flex flex-col items-center">
+                            <div class="spinner mb-3"></div>
+                            <p class="text-sm font-bold text-purple-700 dark:text-purple-400">กำลังประมวลผลภาพรวมทุกปี...</p>
+                        </div>
+                    </div>
+                    <div id="overviewCards" class="grid grid-cols-1 md:grid-cols-3 gap-6"></div>
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <div class="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border dark:border-gray-700 h-[380px]">
+                            <h3 class="text-sm font-bold mb-4">เปรียบเทียบผลงานสะสมรายปี (รายการ)</h3>
+                            <canvas id="ovComparisonChart"></canvas>
+                        </div>
+                        <div class="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border dark:border-gray-700">
+                            <h3 class="text-sm font-bold mb-4">อันดับผลงานแยกตามหน่วยงาน (รวมทุกปี)</h3>
+                            <div class="overflow-y-auto max-h-[280px] pr-2">
+                                <table class="w-full text-xs">
+                                    <thead class="sticky top-0 bg-white dark:bg-gray-800 shadow-sm font-bold text-gray-400 dark:text-gray-300 uppercase text-[10px] border-b dark:border-gray-700">
+                                        <tr class="text-left"><th class="py-2">หน่วยงาน</th><th class="py-2">ทั้งหมด</th><th class="py-2">สำเร็จ</th><th class="py-2 text-right">ร้อยละ</th></tr>
+                                    </thead>
+                                    <tbody id="ovAojRanking" class="divide-y divide-gray-50 dark:divide-gray-700"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- External App View -->
+            <div id="external-container" class="hidden">
+                <div class="w-full h-[calc(100vh-160px)] bg-white dark:bg-gray-800 rounded-2xl shadow-sm border dark:border-gray-700 overflow-hidden">
+                    <iframe id="externalFrame" src="" class="w-full h-full border-none"></iframe>
+                </div>
+            </div>
+
+            <div id="simple-placeholder" class="hidden text-center py-20 bg-white dark:bg-gray-800 rounded-2xl border border-dashed dark:border-gray-700">
+                <h2 class="text-2xl font-bold text-gray-400">อยู่ระหว่างพัฒนาส่วนแสดงผล</h2>
+            </div>
+        </div>
+    </main>
+
+    <!-- Detail Pop-up (Modal) -->
+    <div id="wbsModal" class="fixed inset-0 z-[100] hidden">
+        <div class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm" onclick="closeModal()"></div>
+        <div class="absolute inset-0 flex items-center justify-center p-4">
+            <div class="bg-white dark:bg-gray-800 w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden modal-animate-in relative">
+                
+                <!-- POPUP LOADER -->
+                <div id="modalLoader" class="hidden absolute inset-0 bg-white/90 dark:bg-gray-800/90 z-20 flex flex-col items-center justify-center">
+                    <div class="spinner mb-2"></div>
+                    <p class="text-xs font-bold text-purple-700 dark:text-purple-400">กำลังดึงแผนงาน...</p>
+                </div>
+
+                <div class="pea-gradient p-6 text-white flex justify-between items-center">
+                    <div>
+                        <h3 class="text-xl font-bold tracking-tight">รายละเอียดงาน</h3>
+                        <p id="modalWbsTitle" class="text-xs text-purple-200 font-mono mt-1 opacity-90"></p>
+                    </div>
+                    <button onclick="closeModal()" class="p-2 hover:bg-white/20 rounded-full transition">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                    </button>
+                </div>
+                <div class="p-8 space-y-6">
+                    <div>
+                        <div class="flex items-center gap-2 mb-3">
+                            <div class="w-8 h-8 rounded-lg bg-green-100 dark:bg-green-950/40 text-green-600 dark:text-green-400 flex items-center justify-center">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                            </div>
+                            <h4 class="font-bold text-gray-700 dark:text-gray-300">แผนงานแล้วเสร็จ</h4>
+                        </div>
+                        <div id="modalPlan" class="p-4 bg-gray-50 dark:bg-gray-900 text-sm text-gray-600 dark:text-gray-300 border border-gray-100 dark:border-gray-700 min-h-[60px] whitespace-pre-wrap leading-relaxed"></div>
+                    </div>
+
+                    <div>
+                        <div class="flex items-center gap-2 mb-3">
+                            <div class="w-8 h-8 rounded-lg bg-red-100 dark:bg-red-950/40 text-red-600 dark:text-red-400 flex items-center justify-center">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                            </div>
+                            <h4 class="font-bold text-gray-700 dark:text-gray-300">อุปสรรค/ปัญหา</h4>
+                        </div>
+                        <div id="modalObstacle" class="p-4 bg-red-50 dark:bg-red-950/20 text-red-800 dark:text-red-300 rounded-2xl text-sm border border-red-100 dark:border-red-900/30 min-h-[60px] whitespace-pre-wrap leading-relaxed"></div>
+                    </div>
+                </div>
+                <div class="p-6 border-t dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50 flex justify-end">
+                    <button onclick="closeModal()" class="px-6 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 rounded-xl font-bold hover:bg-gray-100 dark:hover:bg-gray-700 transition shadow-sm">ปิดหน้าต่าง</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // CONFIG และ ข้อมูลพื้นฐาน
+        const CONFIG = {
+            1: {
+                title: "สถานะงานปรับปรุงระบบจำหน่ายแรงต่ำ",
+                sheetId: '177jXMlSiBORg0BupwCuMZ7dxQ3zi-HtLfQ4RgwE-77c',
+                tabs: ['HK', 'IQ', 'JL'],
+                type: 'construction',
+                tabDetails: {
+                    'HK': { gid: '814993712', lv: '5', target: 'มี.ค. 69', label: 'ปี 2567 (HK)', sub: 'เป้าหมาย: มี.ค. 69', color: 'orange' },
+                    'IQ': { gid: '0', lv: '6', target: 'ธ.ค. 69', label: 'ปี 2568 (IQ)', sub: 'เป้าหมาย: ธ.ค. 69', color: 'orange' },
+                    'JL': { gid: '1579558301', lv: '6', target: 'ธ.ค. 70', label: 'ปี 2569 (JL)', sub: 'เป้าหมาย: ธ.ค. 70', color: 'orange' }
+                }
+            },
+            2: {
+                title: "สถานะงานย้ายแนวระบบไฟฟ้า",
+                sheetId: '1PRpGsQ8mdw8uliztdxKan9gSuOpZz8kg9UFCe5Smqvo',
+                tabs: ['HB.67', 'HB.68', 'M4'],
+                type: 'construction',
+                tabDetails: {
+                    'HB.67': { gid: '0', lv: '5', target: 'มิ.ย. 69', label: 'ปี 2567 (HB)', sub: 'เป้าหมาย: มิ.ย. 69', color: 'blue' },
+                    'HB.68': { gid: '698269600', lv: '5', target: 'ธ.ค. 69', label: 'ปี 2568 (HB)', sub: 'เป้าหมาย: ธ.ค. 69', color: 'blue' },
+                    'M4': { gid: '1582735701', lv: '5', target: 'ธ.ค. 70', label: 'ปี 2569 (M4)', sub: 'เป้าหมาย: ธ.ค. 70', color: 'blue' }
+                }
+            },
+            3.1: {
+                title: "พัสดุขาดแคลนงานปรับปรุง",
+                sheetId: '1aPIb_a7JkweOXFisSVFGHu0gswjIzYomUPE9hc3Cgqk',
+                tabs: ['IQ', 'JL'],
+                type: 'material',
+                tabDetails: {
+                    'IQ': { gid: '2041823642', label: 'ปี 2568 (IQ)', sub: 'รายการพัสดุ', color: 'purple' },
+                    'JL': { gid: '2010907776', label: 'ปี 2569 (JL)', sub: 'รายการพัสดุ', color: 'purple' }
+                }
+            },
+            3.2: {
+                title: "พัสดุขาดแคลนงานย้ายแนว",
+                sheetId: '1aPIb_a7JkweOXFisSVFGHu0gswjIzYomUPE9hc3Cgqk',
+                tabs: ['HB', 'M4'],
+                type: 'material',
+                tabDetails: {
+                    'HB': { gid: '1220462523', label: 'ปี 2568 (HB)', sub: 'รายการพัสดุ', color: 'purple' },
+                    'M4': { gid: '660535995', label: 'ปี 2569 (M4)', sub: 'รายการพัสดุ', color: 'purple' }
+                }
+            },
+            4: { 
+                title: "สถานะขออนุมัติเปิดงาน", 
+                type: 'external',
+                url: 'https://script.google.com/macros/s/AKfycbzvQRDSWnOSbjtyOm1YZn8TF-2YGdjJMFOtj84fV3xBzLsrHtjqQr4ex9IQdDLoqoj6UQ/exec'
+            },
+            detailSheetId: '1O_3BmBHxPmY4Rtfm3cbyEA-JX5s3O3d6LL6cIF45oEE',
+            detailGid: '1369077405'
+        };
+
+        let currentPage = 1;
+        let currentSubTab = '';
+        let allData = [];
+        let rawMaterialData = []; 
+        let materialHeaders = [];
+        let globalData = {};
+        let aojList = [];
+        let detailData = []; 
+        let chartInstance = null;
+        let ovChartInstance = null;
+
+        function toggleTheme() {
+            const isDark = document.documentElement.classList.toggle('dark');
+            localStorage.setItem('theme', isDark ? 'dark' : 'light');
+            updateThemeButton(isDark);
+            redrawThemeCharts();
+        }
+
+        function updateThemeButton(isDark) {
+            const sunIcon = document.getElementById('theme-sun');
+            const moonIcon = document.getElementById('theme-moon');
+            const themeText = document.getElementById('theme-text');
+            if (isDark) {
+                sunIcon.classList.remove('hidden');
+                moonIcon.classList.add('hidden');
+                themeText.innerText = 'Dark Mode';
+            } else {
+                sunIcon.classList.add('hidden');
+                moonIcon.classList.remove('hidden');
+                themeText.innerText = 'Light Mode';
+            }
+        }
+
+        function redrawThemeCharts() {
+            // Re-render charts with appropriate dark or light grid/text configurations
+            if(currentPage===0){renderExecutive();return;} if(!dataReady)return; if (currentSubTab === 'OVERVIEW') {
+                renderOverview();
+            } else {
+                if (allData && allData.length > 0) {
+                    const doneCount = filteredRows.filter(i => i.isCompleted).length;
+                    updateChart(doneCount, filteredRows.length - doneCount);
+                }
+            }
+        }
+
+        // ฟังก์ชัน UI ทั่วไป
+        function toggleSidebar() {
+            if (window.innerWidth >= 1024) {
+                document.body.classList.toggle('sidebar-closed');
+            } else {
+                const sidebar = document.getElementById('sidebar');
+                sidebar.classList.toggle('open');
+                document.getElementById('overlay').classList.toggle('hidden');
+            }
+        }
+
+        function toggleSubMenu(id) {
+            const el = document.getElementById(id);
+            const num = id.split('-')[1];
+            const arrow = document.getElementById('arrow-' + num);
+            if (el) el.classList.toggle('hidden');
+            if (arrow) arrow.style.transform = el.classList.contains('hidden') ? 'rotate(0deg)' : 'rotate(180deg)';
+        }
+
+        // ตัวช่วยแสดงสถานะการโหลดแยกส่วน
+        function showLoadingUI(section, isLoading) {
+            const loaders = {
+                table: document.getElementById('tableLoader'),
+                chart: document.getElementById('chartLoader'),
+                ov: document.getElementById('ovLoader'),
+                modal: document.getElementById('modalLoader')
+            };
+
+            const stats = ['statTotal', 'statCompleted', 'statOngoing', 'statPercent'];
+
+            if (isLoading) {
+                if (loaders[section]) loaders[section].classList.remove('hidden');
+                if (section === 'table') {
+                    stats.forEach(id => {
+                        const el = document.getElementById(id);
+                        if (el) el.classList.add('loading-pulse');
+                    });
+                }
+            } else {
+                if (loaders[section]) loaders[section].classList.add('hidden');
+                if (section === 'table') {
+                    stats.forEach(id => {
+                        const el = document.getElementById(id);
+                        if (el) el.classList.remove('loading-pulse');
+                    });
+                }
+            }
+        }
+
+        async function switchMainPage(pageId) {
+            ++requestVersion; currentPage = pageId; document.getElementById("executive").classList.toggle("hidden",pageId!==0);
+            document.querySelectorAll('aside button').forEach(btn => btn.classList.remove('sidebar-item-active'));
+            const navId = 'main-nav-' + pageId.toString().replace('.', '-');
+            const activeNav = document.getElementById(navId);
+            if (activeNav) activeNav.classList.add('sidebar-item-active');
+
+            const dashboard = document.getElementById('dashboard-container');
+            const external = document.getElementById('external-container');
+            const placeholder = document.getElementById('simple-placeholder');
+            const headerActions = document.getElementById('headerActions');
+            const conf = CONFIG[pageId];
+
+            dashboard.classList.add('hidden');
+            external.classList.add('hidden');
+            placeholder.classList.add('hidden');
+            headerActions.classList.remove('hidden');
+
+            if(pageId===0){document.getElementById('pageTitle').innerText='ภาพรวมผู้บริหาร';currentSubTab='EXEC';loadDashboardData();} else if (conf) {
+                document.getElementById('pageTitle').innerText = conf.title;
+                if (conf.type === 'external') {
+                    external.classList.remove('hidden');
+                    headerActions.classList.add('hidden'); 
+                    const frame = document.getElementById('externalFrame');
+                    if (frame.src !== conf.url) frame.src = conf.url;
+                } else if (conf.tabs && conf.tabs.length > 0) {
+                    dashboard.classList.remove('hidden');
+                    adjustLayoutForType(conf.type);
+                    initDashboardUI(pageId);
+                    currentSubTab = (pageId === 1 || pageId === 2) ? 'OVERVIEW' : conf.tabs[0];
+                    switchSubTab(currentSubTab);
+                } else {
+                    placeholder.classList.remove('hidden');
+                }
+            }
+            
+            if (window.innerWidth < 1024) {
+                const sidebar = document.getElementById('sidebar');
+                if (sidebar.classList.contains('open')) toggleSidebar();
+            }
+        }
+
+        function adjustLayoutForType(type) {
+            const stats = document.getElementById('standardStats');
+            const rightArea = document.getElementById('rightWidgetArea');
+            const tableWrapper = document.getElementById('tableViewWrapper');
+            const statusFilter = document.getElementById('statusFilter');
+            const viewHeaderLabel = document.getElementById('viewHeaderLabel');
+            const viewColor = document.getElementById('viewColor');
+
+            if (type === 'material') {
+                stats.classList.add('hidden');
+                rightArea.classList.add('hidden');
+                tableWrapper.classList.replace('lg:col-span-8', 'lg:col-span-12');
+                if (statusFilter) statusFilter.classList.add('hidden');
+                viewHeaderLabel.innerText = "ตารางข้อมูลพัสดุ/เอกสาร";
+                viewColor.className = "w-1.5 h-5 bg-purple-600 rounded-full";
+            } else {
+                stats.classList.remove('hidden');
+                rightArea.classList.remove('hidden');
+                tableWrapper.classList.replace('lg:col-span-12', 'lg:col-span-8');
+                if (statusFilter) statusFilter.classList.remove('hidden');
+                viewHeaderLabel.innerText = "รายการโครงการ";
+                viewColor.className = "w-1.5 h-5 bg-orange-500 rounded-full";
+            }
+        }
+
+        function initDashboardUI(pageId) {
+            const conf = CONFIG[pageId];
+            const tabContainer = document.getElementById('tabContainer');
+            let html = '';
+            if (pageId === 1 || pageId === 2) {
+                html += `<button onclick="switchSubTab('OVERVIEW')" id="btn-OVERVIEW" class="flex-1 min-w-[120px] py-3 text-center rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition text-gray-500">
+                    <span class="block text-lg font-black tracking-tight">SUMMARY</span>
+                    <span class="block text-[10px] font-bold text-purple-600 tracking-tighter">ภาพรวมทุกปี</span>
+                </button>`;
+            }
+            conf.tabs.forEach(tabKey => {
+                const det = conf.tabDetails[tabKey];
+                html += `<button onclick="switchSubTab('${tabKey}')" id="btn-${tabKey}" class="flex-1 min-w-[100px] py-3 text-center rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition text-gray-500">
+                    <span class="block text-lg font-black tracking-tight">${tabKey}</span>
+                    <span class="block text-[10px] font-bold text-${det.color}-600 tracking-tighter">${det.sub}</span>
+                </button>`;
+            });
+            tabContainer.innerHTML = html;
+        }
+
+        function switchSubTab(tab) {
+            currentSubTab = tab;
+            updateTabUI();
+            const mainView = document.getElementById('mainView');
+            const overview = document.getElementById('overviewView');
+            const stats = document.getElementById('standardStats');
+            const conf = CONFIG[currentPage];
+            if (tab === 'OVERVIEW') {
+                mainView.classList.add('hidden');
+                stats.classList.add('hidden');
+                overview.classList.remove('hidden');
+            } else {
+                mainView.classList.remove('hidden');
+                if (conf.type === 'construction') stats.classList.remove('hidden');
+                overview.classList.add('hidden');
+                document.getElementById('tabLabel').innerText = tab;
+            }
+            loadDashboardData();
+        }
+
+        function updateTabUI() {
+            document.querySelectorAll('#tabContainer button').forEach(btn => {
+                btn.classList.remove('tab-active');
+                btn.classList.add('text-gray-500');
+            });
+            const activeBtn = document.getElementById('btn-' + currentSubTab);
+            if (activeBtn) {
+                activeBtn.classList.add('tab-active');
+                activeBtn.classList.remove('text-gray-500');
+            }
+        }
+
+        function csvRecords(csv) { const out=[]; let q=false,start=0; for(let i=0;i<csv.length;i++){const c=csv[i]; if(c==='"'){if(q&&csv[i+1]==='"')i++;else q=!q;} else if(!q&&(c==='\n'||c==='\r')){out.push(csv.slice(start,i));if(c==='\r'&&csv[i+1]==='\n')i++;start=i+1;}} if(q)throw Error('Invalid CSV');out.push(csv.slice(start));return out; }
+        function splitCsvLine(line){let a=[],v='',q=false;for(let i=0;i<line.length;i++){let c=line[i];if(c==='"'){if(q&&line[i+1]==='"'){v+='"';i++;}else q=!q;}else if(c===','&&!q){a.push(v.trim());v='';}else v+=c;}a.push(v.trim());return a;}
+        async function fetchAOJData() {
+            const sheetId = '177jXMlSiBORg0BupwCuMZ7dxQ3zi-HtLfQ4RgwE-77c'; 
+            const url = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&sheet=AOJ`;
+            try {
+                const response = await fetch(url);
+                const csvData = await response.text();
+                const lines = csvRecords(csvData);
+                const list = [];
+                for (let i = 1; i < lines.length; i++) {
+                    const cells = splitCsvLine(lines[i]);
+                    if (cells[1] && cells[2]) list.push({ code: cells[1].trim(), name: cells[2].trim() });
+                }
+                return list;
+            } catch (e) { return []; }
+        }
+
+        async function fetchDetailData() {
+            showLoadingUI('modal', true);
+            const url = `https://docs.google.com/spreadsheets/d/${CONFIG.detailSheetId}/export?format=csv&gid=${CONFIG.detailGid}`;
+            try {
+                const response = await fetch(url);
+                const csvData = await response.text();
+                const lines = csvRecords(csvData);
+                const list = [];
+                for (let i = 1; i < lines.length; i++) {
+                    const cells = splitCsvLine(lines[i]);
+                    if (cells[0]) {
+                        list.push({
+                            wbs: cells[0].trim(),
+                            planComplete: cells[1] || "ไม่มีข้อมูลแผนงาน",
+                            obstacle: cells[2] || "ไม่มีข้อมูลอุปสรรค"
+                        });
+                    }
+                }
+                showLoadingUI('modal', false);
+                return list;
+            } catch (e) { 
+                showLoadingUI('modal', false);
+                return []; 
+            }
+        }
+
+        async function loadDashboardData(force=false){
+ const token=++requestVersion, page=currentPage, tab=currentSubTab; const conf=CONFIG[page]; if(page===0)return loadExecutive(token,force===true); if(!conf||conf.type==='external')return;
+ const overview=tab==='OVERVIEW'; resetPaging(); allData=[];rawMaterialData=[];materialHeaders=[];filteredRows=[]; dataReady=false; document.getElementById('tableBody').innerHTML=''; document.getElementById('tableHeader').innerHTML=''; document.getElementById('overviewCards').innerHTML=''; document.getElementById('ovAojRanking').innerHTML=''; document.getElementById('wbsInfo').innerHTML=''; if(chartInstance){chartInstance.destroy();chartInstance=null;}if(ovChartInstance){ovChartInstance.destroy();ovChartInstance=null;} for(const id of ['statTotal','statCompleted','statOngoing','statPercent'])document.getElementById(id).textContent='—';
+ for(const k of ['ov','table','chart'])showLoadingUI(k,false);showLoadingUI(overview?'ov':'table',true);if(!overview)showLoadingUI('chart',true);setUpdate('กำลังโหลดข้อมูล...');
+ try{await ensureAoj(); if(token!==requestVersion)return; const tabs=overview?conf.tabs:[tab];const results=await Promise.all(tabs.map(t=>getSheet(page,t,force===true)));if(token!==requestVersion)return;
+ if(overview){globalData=Object.fromEntries(tabs.map((t,i)=>[t,results[i].data]));renderOverview();}else if(conf.type==='material'){materialHeaders=results[0].headers;rawMaterialData=results[0].data;renderMaterialTable();}else{allData=results[0].data;renderDashboard();} dataReady=true;setUpdate('ข้อมูล ณ '+new Date(Math.min(...results.map(r=>r.time))).toLocaleString('th-TH'));
+ }catch(e){if(token===requestVersion)setUpdate('โหลดข้อมูลไม่สำเร็จ • กรุณารีเฟรช');console.error(e);}finally{if(token===requestVersion)for(const k of ['ov','table','chart'])showLoadingUI(k,false);}
+}
+        function parseConstructionCSV(csv, targetLv) {
+            const lines = csvRecords(csv);
+            const result = [];
+            for (let i = 1; i < lines.length; i++) {
+                const cells = splitCsvLine(lines[i]);
+                if (cells.length < 4 || (cells[3] || '').toString().trim() !== targetLv) continue;
+                const wbs = (cells[0] || '').trim();
+                const desc = (cells[1] || '').trim();
+                const statusStr = (cells[2] || '').trim();
+                const lastTwo = statusStr.slice(-2).toUpperCase();
+                const isDone = (lastTwo === 'F4' || lastTwo === 'E2');
+                const peaCode = wbs.length >= 10 ? wbs.substring(7, 10) : "";
+                result.push({
+                    wbs, peaCode, jobName: desc, rawStatus: statusStr,
+                    jobStatus: statusStr.length >= 6 ? statusStr.substring(0, 4) + " " + statusStr.slice(-2) : statusStr,
+                    isCompleted: isDone
+                });
+            }
+            return result;
+        }
+
+        function renderDashboard() {
+            const search = (document.getElementById('searchInput')?.value || '').toLowerCase().trim();
+            const aoj = document.getElementById('aojFilter')?.value || '';
+            const status = document.getElementById('statusFilter')?.value || 'all';
+
+            const filtered = allData.filter(item => {
+                const itemStatusText = item.isCompleted ? 'เสร็จสิ้น' : 'ดำเนินการ';
+                const mSearch = item.wbs.toLowerCase().includes(search) || 
+                                item.jobName.toLowerCase().includes(search) ||
+                                item.jobStatus.toLowerCase().includes(search) ||
+                                item.rawStatus.toLowerCase().includes(search) ||
+                                itemStatusText.includes(search);
+                const mAoj = aoj === '' || item.peaCode === aoj;
+                const mStatus = status === 'all' || (status === 'done' ? item.isCompleted : !item.isCompleted);
+                return mSearch && mAoj && mStatus;
+            });
+
+            filteredRows = filtered; preparePaging(filtered);
+            const doneCount = filtered.filter(i => i.isCompleted).length;
+            document.getElementById('statTotal').innerText = filtered.length.toLocaleString();
+            document.getElementById('statCompleted').innerText = doneCount.toLocaleString();
+            document.getElementById('statOngoing').innerText = (filtered.length - doneCount).toLocaleString();
+            document.getElementById('statPercent').innerText = (filtered.length > 0 ? (doneCount/filtered.length*100).toFixed(2) : "0.00") + '%';
+
+            document.getElementById('tableHeader').innerHTML = `<tr><th class="px-6 py-4">WBS</th><th class="px-6 py-4">ชื่องาน</th><th class="px-6 py-4">สถานะงาน</th><th class="px-6 py-4 text-center">สถานะ</th></tr>`;
+
+            document.getElementById('tableBody').innerHTML = filtered.length === 0 ? 
+                `<tr><td colspan="4" class="p-10 text-center text-gray-400 dark:text-gray-500">ไม่พบข้อมูล</td></tr>` :
+                pageRows(filtered).map(item => `
+                    <tr onclick="showWbsModal('${item.wbs}')" class="hover:bg-purple-50 dark:hover:bg-purple-950/20 transition border-b border-gray-50 dark:border-gray-700/50 cursor-pointer">
+                        <td class="px-6 py-3 font-bold text-gray-700 dark:text-gray-300 font-mono text-[11px]">${item.wbs}</td>
+                        <td class="px-6 py-3 text-gray-800 dark:text-gray-200">${item.jobName}</td>
+                        <td class="px-6 py-3 font-mono text-gray-500 dark:text-gray-400">${item.jobStatus}</td>
+                        <td class="px-6 py-3 text-center">
+                            <span class="px-3 py-1 rounded-full text-[9px] font-black uppercase border shadow-sm ${item.isCompleted ? 'bg-green-100 text-green-700 border-green-200 dark:bg-green-950/40 dark:text-green-400 dark:border-green-900/30' : 'bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950/40 dark:text-orange-400 dark:border-orange-900/30'}">
+                                ${item.isCompleted ? 'เสร็จสิ้น' : 'ดำเนินการ'}
+                            </span>
+                        </td>
+                    </tr>
+                `).join('');
+
+            wireSort(); updateChart(doneCount, filtered.length - doneCount);
+            const det = CONFIG[currentPage].tabDetails ? CONFIG[currentPage].tabDetails[currentSubTab] : null;
+            document.getElementById('wbsInfo').innerHTML = (det && det.target) ? 
+                `<div class="p-4 bg-purple-50 dark:bg-purple-950/25 rounded-xl border border-purple-100 dark:border-purple-900/40"><div class="text-[10px] uppercase font-bold text-purple-400 dark:text-purple-300 mb-1">เป้าหมาย</div><div class="text-xl font-black text-purple-900 dark:text-purple-200">${det.target}</div></div>` :
+                `<div class="p-4 bg-gray-50 dark:bg-gray-900 rounded-xl italic text-gray-400 dark:text-gray-500 text-xs">ไม่มีระบุเป้าหมาย</div>`;
+        }
+
+        async function showWbsModal(wbs) {
+            const modal = document.getElementById('wbsModal');
+            const title = document.getElementById('modalWbsTitle');
+            const plan = document.getElementById('modalPlan');
+            const obs = document.getElementById('modalObstacle');
+
+            title.innerText = "WBS: " + wbs;
+            modal.classList.remove('hidden');
+            document.body.style.overflow = 'hidden';
+
+            if (detailData.length === 0) {
+                detailData = await fetchDetailData();
+            }
+
+            const match = detailData.find(d => d.wbs === wbs);
+            if (match) {
+                plan.innerText = match.planComplete;
+                obs.innerText = match.obstacle;
+            } else {
+                plan.innerText = "ไม่พบข้อมูล";
+                obs.innerText = "ไม่พบข้อมูล";
+            }
+        }
+
+        function closeModal() {
+            document.getElementById('wbsModal').classList.add('hidden');
+            document.body.style.overflow = '';
+        }
+
+        function renderMaterialTable() {
+            const search = (document.getElementById('searchInput')?.value || '').toLowerCase().trim();
+            const selectedAojCode = document.getElementById('aojFilter')?.value || '';
+            const headerRow = document.getElementById('tableHeader');
+            const tableBody = document.getElementById('tableBody');
+            headerRow.innerHTML = `<tr>${materialHeaders.map(h => `<th class="px-4 py-4 whitespace-nowrap bg-gray-50 dark:bg-gray-700/50 border-b dark:border-gray-700 font-bold dark:text-gray-200">${h}</th>`).join('')}</tr>`;
+            const filtered = rawMaterialData.filter(row => {
+                const mSearch = search === '' || row.some(cell => (cell || '').toString().toLowerCase().includes(search));
+                let mAoj = true;
+                if (selectedAojCode !== '') {
+                    const selName = aojList.find(a => a.code === selectedAojCode)?.name || "";
+                    mAoj = (row[1] || '').toString().includes(selName);
+                }
+                return mSearch && mAoj;
+            });
+            filteredRows = filtered; preparePaging(filtered);
+            tableBody.innerHTML = filtered.length === 0 ? 
+                `<tr><td colspan="${materialHeaders.length}" class="p-10 text-center text-gray-400 dark:text-gray-500">ไม่พบข้อมูล</td></tr>` :
+                pageRows(filtered).map(row => `
+                    <tr class="hover:bg-purple-50 dark:hover:bg-purple-950/20 transition border-b border-gray-50 dark:border-gray-700/50">
+                        ${row.map(cell => {
+                            let cellVal = (cell || '').toString();
+                            let style = "px-4 py-3 text-gray-700 dark:text-white";
+                            if (cellVal.includes("ขาด") || cellVal === "0") style += " text-red-500 dark:text-red-400 font-bold";
+                            if (cellVal.includes("ครบ") || cellVal.includes("สำเร็จ")) style += " text-green-600 dark:text-green-400 font-bold";
+                            return `<td class="${style}">${cellVal}</td>`;
+                        }).join('')}
+                    </tr>
+                `).join('');
+            wireSort();
+        }
+
+        async function fetchData(pageId, tabKey) {
+            const conf = CONFIG[pageId];
+            const det = conf.tabDetails[tabKey];
+            const url = `https://docs.google.com/spreadsheets/d/${conf.sheetId}/export?format=csv&gid=${det.gid}`;
+            try {
+                const response = await fetch(url);
+                const csvData = await response.text();
+                return parseConstructionCSV(csvData, det.lv);
+            } catch (e) { return []; }
+        }
+
+        function populateAojFilter() {
+            const options = aojList.map(a => `<option value="${a.code}">${a.name}</option>`).join('');
+            document.getElementById('aojFilter').innerHTML = '<option value="">การไฟฟ้า: ทั้งหมด</option>' + options;
+        }
+
+        function applyFilters() {
+            if(!dataReady || !CONFIG[currentPage] || currentSubTab==='OVERVIEW' || CONFIG[currentPage].type==='external')return; if (CONFIG[currentPage].type === 'material') renderMaterialTable();
+            else renderDashboard();
+        }
+
+        function updateChart(done, working) {
+            if (chartInstance) chartInstance.destroy();
+            
+            const isDark = document.documentElement.classList.contains('dark');
+            const legendTextColor = isDark ? '#E5E7EB' : '#374151';
+            
+            const ctx = document.getElementById('statusChart').getContext('2d');
+            chartInstance = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['เสร็จสิ้น', 'ดำเนินการ'],
+                    datasets: [{ data: [done, working], backgroundColor: ['#10B981', '#FF8500'], borderWidth: 0 }]
+                },
+                options: { 
+                    responsive: true, 
+                    maintainAspectRatio: false, 
+                    cutout: '75%', 
+                    plugins: { 
+                        legend: { 
+                            position: 'bottom', 
+                            labels: { 
+                                usePointStyle: true, 
+                                color: legendTextColor,
+                                font: { size: 10, family: 'Sarabun' } 
+                            } 
+                        } 
+                    } 
+                }
+            });
+        }
+
+        function renderOverview() {
+            const conf = CONFIG[currentPage];
+            const summary = {};
+            const aojStats = {};
+            let cardsHtml = '';
+            conf.tabs.forEach(p => {
+                const det = conf.tabDetails[p];
+                const data = globalData[p] || [];
+                const total = data.length;
+                const done = data.filter(i => i.isCompleted).length;
+                const perc = total > 0 ? (done / total * 100).toFixed(2) : 0;
+                summary[p] = { total, done, perc };
+                cardsHtml += `<div class="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border-t-4 ${det.color === 'orange' ? 'border-orange-500' : 'border-blue-500'} card-hover">
+                    <h3 class="text-sm font-bold text-gray-650 dark:text-gray-300">${det.label}</h3>
+                    <div class="mt-4 flex justify-between items-end"><p class="text-3xl font-black text-gray-800 dark:text-white">${perc}%</p><p class="text-[10px] text-gray-400 font-bold">${done}/${total}</p></div>
+                    <div class="w-full bg-gray-100 dark:bg-gray-700 h-2 rounded-full mt-3 overflow-hidden"><div class="bg-${det.color === 'blue' ? 'blue-500' : 'orange-500'} h-full" style="width: ${perc}%"></div></div>
+                </div>`;
+                data.forEach(item => {
+                    if (!aojStats[item.peaCode]) aojStats[item.peaCode] = { total: 0, done: 0 };
+                    aojStats[item.peaCode].total++;
+                    if (item.isCompleted) aojStats[item.peaCode].done++;
+                });
+            });
+            document.getElementById('overviewCards').innerHTML = cardsHtml;
+            const sortedAoj = Object.keys(aojStats).sort((a,b) => (aojStats[b].done/aojStats[b].total) - (aojStats[a].done/aojStats[a].total));
+            document.getElementById('ovAojRanking').innerHTML = sortedAoj.map(code => {
+                const s = aojStats[code];
+                const name = aojList.find(a => a.code === code)?.name || code;
+                return `<tr class="border-b border-gray-50 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-750/30"><td class="py-3 font-bold text-gray-750 dark:text-gray-250">${name}</td><td class="text-gray-600 dark:text-gray-300">${s.total}</td><td class="text-green-600 dark:text-green-400">${s.done}</td><td class="text-right font-black text-purple-700 dark:text-purple-400">${(s.done/s.total*100).toFixed(1)}%</td></tr>`;
+            }).join('');
+            
+            if (ovChartInstance) ovChartInstance.destroy();
+            
+            const isDark = document.documentElement.classList.contains('dark');
+            const legendTextColor = isDark ? '#E5E7EB' : '#374151';
+            const gridColor = isDark ? '#374151' : '#E5E7EB';
+            
+            ovChartInstance = new Chart(document.getElementById('ovComparisonChart').getContext('2d'), {
+                type: 'bar',
+                data: {
+                    labels: conf.tabs.map(p => conf.tabDetails[p].label),
+                    datasets: [
+                        { label: 'เสร็จสิ้น', data: conf.tabs.map(p => summary[p].done), backgroundColor: '#10B981' },
+                        { label: 'ดำเนินการ', data: conf.tabs.map(p => summary[p].total - summary[p].done), backgroundColor: isDark ? '#4B5563' : '#E5E7EB' }
+                    ]
+                },
+                options: { 
+                    responsive: true, 
+                    maintainAspectRatio: false, 
+                    plugins: {
+                        legend: {
+                            labels: {
+                                color: legendTextColor,
+                                font: { family: 'Sarabun' }
+                            }
+                        }
+                    },
+                    scales: { 
+                        x: { 
+                            stacked: true,
+                            ticks: { color: legendTextColor, font: { family: 'Sarabun' } },
+                            grid: { color: gridColor }
+                        }, 
+                        y: { 
+                            stacked: true,
+                            ticks: { color: legendTextColor, font: { family: 'Sarabun' } },
+                            grid: { color: gridColor }
+                        } 
+                    } 
+                }
+            });
+        }
+
+        function exportToExcel(){if(!dataReady||currentSubTab==='OVERVIEW')return;const material=CONFIG[currentPage].type==='material', all=document.getElementById('exportScope').value==='all';const rows=all?(material?rawMaterialData:allData):sortedRows(filteredRows);const matrix=material?[materialHeaders,...rows]:[['WBS','หน่วยงาน','ชื่องาน','สถานะ SAP','สถานะดำเนินงาน'],...rows.map(i=>[i.wbs,aojList.find(a=>a.code===i.peaCode)?.name||i.peaCode,i.jobName,i.rawStatus,i.isCompleted?'เสร็จสิ้น':'ดำเนินการ'])];const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(matrix),'Data');XLSX.writeFile(wb,`PEA_Export_${currentSubTab}.xlsx`);}
+        
+        
+        let requestVersion=0, dataReady=false, filteredRows=[],tablePage=1,sortColumn=-1,sortDirection=1,execData=null;
+const sheetCache=new Map();let aojPending=null;
+function setUpdate(t){document.getElementById('updateText').textContent=t;}
+async function ensureAoj(){if(aojList.length)return;if(!aojPending)aojPending=fetchAOJData().finally(()=>aojPending=null);aojList=await aojPending;populateAojFilter();const e=document.getElementById('execAoj');e.replaceChildren(new Option('ทุกการไฟฟ้า',''),...aojList.map(a=>new Option(a.name,a.code)));}
+async function getSheet(page,tab,force){const key=page+':'+tab,old=sheetCache.get(key);if(!force&&old&&Date.now()-old.time<300000)return old;const c=CONFIG[page],d=c.tabDetails[tab];const r=await fetch(`https://docs.google.com/spreadsheets/d/${c.sheetId}/export?format=csv&gid=${d.gid}&t=${Date.now()}`);if(!r.ok)throw Error('HTTP '+r.status);const csv=await r.text();if(!csv.trim()||/^\s*</.test(csv))throw Error('Invalid CSV response');let result;if(c.type==='material'){const lines=csvRecords(csv).filter(l=>l.trim());result={headers:splitCsvLine(lines[0]),data:lines.slice(1).map(splitCsvLine)};}else{if(splitCsvLine(csvRecords(csv)[0]).length<4)throw Error('Invalid header');result={data:parseConstructionCSV(csv,d.lv)};}result.time=Date.now();sheetCache.set(key,result);return result;}
+function resetPaging(){tablePage=1;sortColumn=-1;sortDirection=1;}
+function sortedRows(rows){if(sortColumn<0)return rows.slice();const get=r=>Array.isArray(r)?r[sortColumn]:[r.wbs,r.jobName,r.jobStatus,r.isCompleted?'เสร็จสิ้น':'ดำเนินการ'][sortColumn];return rows.slice().sort((a,b)=>sortDirection*String(get(a)??'').localeCompare(String(get(b)??''),'th',{numeric:true}));}
+function preparePaging(rows){const size=document.getElementById('pageSize').value;const n=size==='all'?Math.max(1,rows.length):Number(size);const pages=Math.max(1,Math.ceil(rows.length/n));tablePage=Math.min(tablePage,pages);document.getElementById('pageInfo').textContent=`หน้า ${tablePage}/${pages} • ${rows.length.toLocaleString()} รายการ`;document.getElementById('prevPage').disabled=tablePage<=1;document.getElementById('nextPage').disabled=tablePage>=pages;}
+function pageRows(rows){const sorted=sortedRows(rows),size=document.getElementById('pageSize').value;return size==='all'?sorted:sorted.slice((tablePage-1)*Number(size),tablePage*Number(size));}
+function movePage(n){tablePage=Math.max(1,tablePage+n);applyFilters();}
+function wireSort(){document.querySelectorAll('#tableHeader th').forEach((th,i)=>{th.style.cursor='pointer';th.tabIndex=0;th.setAttribute('aria-sort',sortColumn===i?(sortDirection===1?'ascending':'descending'):'none');th.append(document.createTextNode(sortColumn===i?(sortDirection===1?' ↑':' ↓'):' ↕'));const f=()=>{sortDirection=sortColumn===i?-sortDirection:1;sortColumn=i;tablePage=1;applyFilters();};th.onclick=f;th.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();f();}};});}
+for(const id of ['searchInput','aojFilter','statusFilter'])document.getElementById(id).addEventListener(id==='searchInput'?'input':'change',()=>{tablePage=1;applyFilters();});
+async function loadExecutive(token,force){execData=null;renderExecutive();setUpdate('กำลังโหลดภาพรวม...');document.getElementById('execMessage').textContent='กำลังโหลด...';try{await ensureAoj();const plans=[1,2].flatMap(p=>CONFIG[p].tabs.map(t=>({p,t})));const results=await Promise.all(plans.map(async x=>({...x,...await getSheet(x.p,x.t,force)})));if(token!==requestVersion)return;execData=results;renderExecutive();setUpdate('ข้อมูล ณ '+new Date(Math.min(...results.map(r=>r.time))).toLocaleString('th-TH'));document.getElementById('execMessage').textContent='';}catch(e){if(token===requestVersion){setUpdate('โหลดภาพรวมไม่สำเร็จ');document.getElementById('execMessage').textContent='ไม่สามารถโหลดครบทุกแผนงาน กรุณารีเฟรช';}}}
+function deadlineDays(target,now=new Date()){const months=['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];const [m,y]=target.split(' ');const month=months.indexOf(m);if(month<0)return null;const year=2500+Number(y)-543;const parts=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Bangkok',year:'numeric',month:'numeric',day:'numeric'}).formatToParts(now);const val=k=>Number(parts.find(p=>p.type===k).value);return Math.round((Date.UTC(year,month+1,0)-Date.UTC(val('year'),val('month')-1,val('day')))/86400000);}
+function renderExecutive(){const cards=document.getElementById('execCards'),table=document.getElementById('execTable');cards.innerHTML='';table.innerHTML='';if(!execData)return;const aoj=document.getElementById('execAoj').value;let total=0,done=0;const rows=execData.map(x=>{const d=CONFIG[x.p].tabDetails[x.t],data=x.data.filter(i=>!aoj||i.peaCode===aoj),n=data.length,k=data.filter(i=>i.isCompleted).length,left=n-k,days=deadlineDays(d.target);total+=n;done+=k;const status=!n?'ไม่มีงาน':!left?'เสร็จสิ้น':days<0?'เกินกำหนด':days<=30?'ใกล้ครบกำหนด':'อยู่ในกำหนด';return `<tr class="border-b dark:border-gray-700"><td class="p-3"><button class="text-purple-600 dark:text-purple-400 font-bold" onclick="openPlan(${x.p},'${x.t}')">${x.t}</button></td><td>${d.target}</td><td>${n}</td><td>${k}</td><td>${left}</td><td>${n?(k/n*100).toFixed(2):'—'}%</td><td>${status}</td><td>${days<0?'เกิน '+(-days):days}</td><td>${left&&days>=0?(left/(days+1)).toFixed(2):'—'}</td></tr>`;});cards.innerHTML=[['งานทั้งหมด',total],['เสร็จสิ้น',done],['คงเหลือ',total-done],['ความสำเร็จ',total?(done/total*100).toFixed(2)+'%':'—']].map(([l,v])=>`<div class="bg-white dark:bg-gray-800 rounded-2xl p-5 border dark:border-gray-700"><p>${l}</p><strong class="text-3xl">${v.toLocaleString()}</strong></div>`).join('');table.innerHTML='<thead><tr>'+['แผนงาน','เป้าหมาย','ทั้งหมด','เสร็จ','คงเหลือ','สำเร็จ','สถานะ','วันถึงเป้า','งาน/วัน'].map(h=>`<th class="p-2 text-left">${h}</th>`).join('')+'</tr></thead><tbody>'+rows.join('')+'</tbody>';}
+function openPlan(p,t){switchMainPage(p);document.getElementById('aojFilter').value=document.getElementById('execAoj').value;switchSubTab(t);}
+        window.onload = () => {
+            const isDark = document.documentElement.classList.contains('dark');
+            updateThemeButton(isDark);
+            switchMainPage(0);
+        };
+    </script>
+</body>
+</html>
